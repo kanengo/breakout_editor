@@ -66,7 +66,10 @@ fn main() {
       .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(
+   mut commands: Commands,
+   asset_server: Res<AssetServer>,
+) {
    commands.spawn((Camera2dBundle::default(), MainCamera));
 
    //edge background
@@ -79,15 +82,49 @@ fn setup(mut commands: Commands) {
       ..default()
    });
 
+   let text_style = TextStyle {
+      font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+      font_size: 16.0,
+      color: Color::rgb(0.9, 0.9, 0.9),
+   };
+
+   //base ui node
    commands.spawn(NodeBundle {
       transform: Transform::from_translation(Vec2::new(0.0, SCREEN_SIZE.1 - UI_NODE_SIZE.y / 2.0).extend(0.0)),
       style: Style {
          width: Val::Px(UI_NODE_SIZE.x),
          height: Val::Px(UI_NODE_SIZE.y),
+         top: Val::Px(SCREEN_SIZE.1 - UI_NODE_SIZE.y),
          ..default()
       },
-      background_color: Color::BLACK.into(),
+      background_color: Color::rgb(35.0/255.0, 35.0/255.0, 38.0/255.0).into(),
       ..default()
+   }).with_children(|parent| { //node 2
+      parent.spawn(NodeBundle {
+         style: Style {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+         },
+         ..default()
+      }).with_children(|parent|{ //node 3
+         // parent.spawn(
+         //    TextBundle::from_section("Bricks", text_style.clone())
+         // );
+         // parent.spawn(
+         //    TextBundle::from_section("Bricks", text_style.clone())
+         // );
+         parent.spawn(NodeBundle {
+            style: Style {
+               flex_direction: FlexDirection::Column,
+               align_items: AlignItems::Center,
+               justify_content: JustifyContent::Center,
+               ..default()
+            },
+            ..default()
+         });
+      });
    });
 
 }
