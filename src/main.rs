@@ -33,14 +33,14 @@ const EDGE_SIZE:(f32, f32) = (840.0, 840.0);
 const UI_NODE_SIZE: Vec2 = Vec2::new(300.0, 150.0);
 
 #[derive(Resource,Default)]
-struct MyWorldCoords(Vec2);
+struct CursorWorldCoords(Vec2);
 
 #[derive(Component)]
 struct MainCamera;
 
 enum SelectedType {
-   Brick,
-   Wall,
+   Brick(Color),
+   Wall(Color),
 }
 
 
@@ -59,7 +59,7 @@ fn main() {
          LogDiagnosticsPlugin::default(),
          FrameTimeDiagnosticsPlugin,
       ))
-      .init_resource::<MyWorldCoords>()
+      .init_resource::<CursorWorldCoords>()
       .insert_resource(ClearColor(BACKGROUND_COLOR))
       .add_systems(Startup, setup)
       .add_systems(Update, my_cursor_system)
@@ -88,18 +88,20 @@ fn setup(
       color: Color::rgb(0.9, 0.9, 0.9),
    };
 
-   //base ui node
    commands.spawn(NodeBundle {
-      transform: Transform::from_translation(Vec2::new(0.0, SCREEN_SIZE.1 - UI_NODE_SIZE.y / 2.0).extend(0.0)),
+      //base ui node
       style: Style {
          width: Val::Px(UI_NODE_SIZE.x),
          height: Val::Px(UI_NODE_SIZE.y),
          top: Val::Px(SCREEN_SIZE.1 - UI_NODE_SIZE.y),
+         align_items: AlignItems::Center,
+         justify_content: JustifyContent::Center,
          ..default()
       },
       background_color: Color::rgb(35.0/255.0, 35.0/255.0, 38.0/255.0).into(),
       ..default()
-   }).with_children(|parent| { //node 2
+   }).with_children(|parent| {
+       //main node 
       parent.spawn(NodeBundle {
          style: Style {
             flex_direction: FlexDirection::Row,
@@ -108,34 +110,73 @@ fn setup(
             ..default()
          },
          ..default()
-      }).with_children(|parent|{ //node 3
-         // parent.spawn(
-         //    TextBundle::from_section("Bricks", text_style.clone())
-         // );
-         // parent.spawn(
-         //    TextBundle::from_section("Bricks", text_style.clone())
-         // );
-         parent.spawn(NodeBundle {
+      }).with_children(|parent|{
+         //brick node
+         parent.spawn(NodeBundle {          
             style: Style {
                flex_direction: FlexDirection::Column,
                align_items: AlignItems::Center,
                justify_content: JustifyContent::Center,
+               // padding: UiRect::all(Val::Px(5.0)),
                ..default()
             },
+            // background_color: Color::YELLOW.into(),
             ..default()
+         }).with_children(|parent|{ 
+            //brick text
+            parent.spawn(
+               TextBundle::from_section("Bricks", text_style.clone())
+            );
+
+            //brick container
+            parent.spawn(NodeBundle { 
+                style: Style {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Stretch,
+                    padding: UiRect::all(Val::Px(5.)),
+                    margin: UiRect::top(Val::Px(10.)),
+                    ..Default::default()
+                },
+                background_color: Color::YELLOW.into(),
+                ..Default::default()
+            }).with_children(|parent: &mut ChildBuilder<'_, '_, '_>| {
+               spawn_ui_bricks(parent);
+            });
+         });
+
+         //wall node
+         parent.spawn(NodeBundle {          
+            style: Style {
+               flex_direction: FlexDirection::Column,
+               align_items: AlignItems::Center,
+               justify_content: JustifyContent::Center,
+               // padding: UiRect::all(Val::Px(5.0)),
+               ..default()
+            },
+            // background_color: Color::YELLOW.into(),
+            ..default()
+         }).with_children(|parent|{ 
+            //brick text
+            parent.spawn(
+               TextBundle::from_section("Wall", text_style.clone())
+            );
          });
       });
    });
 
 }
 
+fn spawn_ui_bricks(parent: &mut ChildBuilder) {
+
+}
+
 fn my_cursor_system(
-   mut my_coords: ResMut<MyWorldCoords>,
-   mut q_window: Query<&mut Window, With<PrimaryWindow>>,
+   mut cursor_world_coords: ResMut<CursorWorldCoords>,
+   q_window: Query<&Window, With<PrimaryWindow>>,
    q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
 ){
    let (camera, camera_transform) = q_camera.single();
-   let mut window = q_window.single_mut();
+   let window = q_window.single();
 
    let Some(cursor_position) = window.cursor_position()
    else {
@@ -147,6 +188,7 @@ fn my_cursor_system(
       return;
    };
 
+   cursor_world_coords.0 = point;
    // window.cursor.visible = true;
    
    // info!("cursor:{:?}, point:{:?}", cursor_position, point)
