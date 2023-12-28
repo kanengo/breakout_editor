@@ -131,7 +131,7 @@ fn setup(
             //brick container
             parent.spawn(NodeBundle { 
                 style: Style {
-                    flex_direction: FlexDirection::Column,
+                    flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Stretch,
                     padding: UiRect::all(Val::Px(5.)),
                     margin: UiRect::top(Val::Px(10.)),
@@ -140,7 +140,7 @@ fn setup(
                 background_color: Color::YELLOW.into(),
                 ..Default::default()
             }).with_children(|parent: &mut ChildBuilder<'_, '_, '_>| {
-               spawn_ui_bricks(parent);
+               spawn_ui_brick_button(parent);
             });
          });
 
@@ -166,8 +166,20 @@ fn setup(
 
 }
 
-fn spawn_ui_bricks(parent: &mut ChildBuilder) {
-
+fn spawn_ui_brick_button(parent: &mut ChildBuilder) {
+   for &brick_color in BRICK_COLORS {
+      parent.spawn((
+         ButtonBundle {
+             style: Style {
+                border: UiRect::all(Val::Px(2.)),
+                margin: UiRect::horizontal(Val::Px(2.)),
+               ..default()
+             },
+             background_color: brick_color.into(),
+             ..default()
+         },
+       ));
+   }
 }
 
 fn my_cursor_system(
