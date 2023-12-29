@@ -1,15 +1,17 @@
 
 use bevy::app::Update;
-use bevy::diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin};
+use bevy::diagnostic::{LogDiagnosticsPlugin};
 use bevy::math::Vec2;
 use bevy::prelude::{*};
+use bevy::ui::RelativeCursorPosition;
 use bevy::window::PrimaryWindow;
 
 
 const BACKGROUND_COLOR: Color = Color::rgb(35.0/255.0, 35.0/255.0, 105.0/255.0);
 const EDGE_COLOR: Color = Color::rgb(25.0/255.0, 25.0/255.0, 72.0/255.0);
 
-const BRICK_COLOR: Color = Color::rgb(52.0/255.0, 216.0/255.0, 0.0/255.0);
+const BRICK_DEFAULT_COLOR: Color = Color::rgb(52.0/255.0, 216.0/255.0, 0.0/255.0);
+const BRICK_SIZE: Vec2 = Vec2::new(10., 10.);
 // const BRICK_COLOR: Color = Color::rgb(64.0/255.0, 230.0/255.0, 255.0/255.0);
 // const BRICK_COLOR: Color = Color::rgb(64.0/255.0, 230.0/255.0, 255.0/255.0);
 // const BRICK_COLOR: Color = Color::rgb(253.0/255.0, 240.0/255.0, 0.0/255.0);
@@ -32,19 +34,32 @@ const EDGE_SIZE:(f32, f32) = (840.0, 840.0);
 
 const UI_NODE_SIZE: Vec2 = Vec2::new(300.0, 150.0);
 
-#[derive(Resource,Default)]
+#[derive(Resource,Default, Deref, DerefMut)]
 struct CursorWorldCoords(Vec2);
+
+#[derive(Resource, Deref, DerefMut, Debug)]
+struct SelectedButton(BrickButton);
+
+impl Default for SelectedButton {
+    fn default() -> Self {
+        Self(BrickButton::Brick(BRICK_DEFAULT_COLOR))
+    }
+}
 
 #[derive(Component)]
 struct MainCamera;
 
-#[derive(Component)]
+#[derive(Component,Debug, Clone, Copy)]
 enum BrickButton {
    Brick(Color),
    Wall(Color),
 }
 
-
+#[derive(Component)]
+enum Brick {
+   Normal(Color),
+   Wall(Color),
+}
 
 fn main() {
    App::new()
@@ -58,12 +73,18 @@ fn main() {
             ..default()
          }),
          LogDiagnosticsPlugin::default(),
-         FrameTimeDiagnosticsPlugin,
+         // FrameTimeDiagnosticsPlugin,
       ))
       .init_resource::<CursorWorldCoords>()
+      .init_resource::<SelectedButton>()
       .insert_resource(ClearColor(BACKGROUND_COLOR))
-      .add_systems(Startup, setup)
-      .add_systems(Update, my_cursor_system)
+      .add_systems(Startup, (
+         setup,
+      ))
+      .add_systems(Update, (
+         my_cursor_system,
+         update_buttons,
+      ))
       .run();
 }
 
@@ -101,13 +122,14 @@ fn setup(
       },
       background_color: Color::rgb(35.0/255.0, 35.0/255.0, 38.0/255.0).into(),
       ..default()
-   }).with_children(|parent| {
+   }).insert(RelativeCursorPosition::default()).with_children(|parent| {
        //main node 
       parent.spawn(NodeBundle {
          style: Style {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::SpaceAround,
+            justify_content: JustifyContent::Center,
+            // margin: UiRect::horizontal(Val::Px(20.)),
             ..default()
          },
          ..default()
@@ -118,10 +140,11 @@ fn setup(
                flex_direction: FlexDirection::Column,
                align_items: AlignItems::Center,
                justify_content: JustifyContent::Center,
+               margin: UiRect::horizontal(Val::Px(20.)),
                // padding: UiRect::all(Val::Px(5.0)),
                ..default()
             },
-            // background_color: Color::YELLOW.into(),
+            // background_color: Color::BLUE.into(),
             ..default()
          }).with_children(|parent|{ 
             //brick text
@@ -151,12 +174,13 @@ fn setup(
                flex_direction: FlexDirection::Column,
                align_items: AlignItems::Center,
                justify_content: JustifyContent::Center,
+               margin: UiRect::horizontal(Val::Px(20.)),
                // padding: UiRect::all(Val::Px(5.0)),
                ..default()
             },
-            // background_color: Color::YELLOW.into(),
+            // background_color: Color::GREEN.into(),
             ..default()
-         }).with_children(|parent|{ 
+         }).with_children(|parent: &mut ChildBuilder<'_, '_, '_>|{ 
             //brick text
             parent.spawn(
                TextBundle::from_section("Wall", text_style.clone())
@@ -167,6 +191,36 @@ fn setup(
       });
    });
 
+}
+
+fn setup_brick(
+   mut commands: Commands,
+   selected_button_res: Res<SelectedButton>
+) {
+   let brick_component;
+   let brick_color;
+   match selected_button_res.0 {
+      BrickButton::Brick(color) => {
+         brick_component = Brick::Normal(color);
+         brick_color = color;
+      },
+      BrickButton::Wall(color) => {
+         brick_component = Brick::Wall(color);
+         brick_color = color;
+      },
+   };
+   commands.spawn((
+      SpriteBundle {
+          sprite: Sprite {
+              color: brick_color,
+              ..default()
+          },
+          // global_transform: GlobalTransform::from(Transform::IDENTITY),
+          transform: Transform::from_translation(0.,0., 0.).with_scale(BRICK_SIZE),
+          ..default()
+      },
+      brick_component,
+  ));
 }
 
 fn spawn_ui_brick_button(parent: &mut ChildBuilder) {
@@ -225,6 +279,24 @@ fn spawn_ui_wall_button(parent: &mut ChildBuilder) {
      
    });
    
+}
+
+fn update_buttons(
+   button_query: Query<
+      (&Interaction, &BrickButton),
+      Changed<Interaction>
+   >,
+   mut selected_button_res: ResMut<SelectedButton>
+){
+   for (&interaction, &brick_buttion) in &button_query {
+      match interaction {
+         Interaction::Pressed => {
+            selected_button_res.0 = brick_buttion;
+            info!("selected_button_res:{:?}", selected_button_res.0);
+         },
+         _ => {}
+      }
+   }
 }
 
 fn my_cursor_system(
