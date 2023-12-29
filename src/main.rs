@@ -38,7 +38,8 @@ struct CursorWorldCoords(Vec2);
 #[derive(Component)]
 struct MainCamera;
 
-enum SelectedType {
+#[derive(Component)]
+enum BrickButton {
    Brick(Color),
    Wall(Color),
 }
@@ -106,7 +107,7 @@ fn setup(
          style: Style {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
+            justify_content: JustifyContent::SpaceAround,
             ..default()
          },
          ..default()
@@ -131,11 +132,11 @@ fn setup(
             //brick container
             parent.spawn(NodeBundle { 
                 style: Style {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Stretch,
-                    padding: UiRect::all(Val::Px(5.)),
-                    margin: UiRect::top(Val::Px(10.)),
-                    ..Default::default()
+                  flex_direction: FlexDirection::Row,
+                  align_items: AlignItems::Stretch,
+                  padding: UiRect::all(Val::Px(2.)),
+                  margin: UiRect::top(Val::Px(10.)),
+                  ..Default::default()
                 },
                 background_color: Color::YELLOW.into(),
                 ..Default::default()
@@ -160,6 +161,8 @@ fn setup(
             parent.spawn(
                TextBundle::from_section("Wall", text_style.clone())
             );
+
+            spawn_ui_wall_button(parent);
          });
       });
    });
@@ -167,19 +170,61 @@ fn setup(
 }
 
 fn spawn_ui_brick_button(parent: &mut ChildBuilder) {
-   for &brick_color in BRICK_COLORS {
+   parent.spawn(NodeBundle {
+      style: Style {
+         flex_direction: FlexDirection::Row,
+         ..default()
+      },
+      background_color: Color::BLACK.into(),
+      ..default()
+   }).with_children(|parent| {
+      for &brick_color in BRICK_COLORS {
+         parent.spawn((
+            ButtonBundle {
+                  style: Style {
+                  width: Val::Px(20.),
+                  height: Val::Px(20.),
+                  border: UiRect::all(Val::Px(2.)),
+                  margin: UiRect::all(Val::Px(2.)),
+                  ..default()
+                },
+                background_color: brick_color.into(),
+                ..default()
+            },
+            BrickButton::Brick(brick_color),
+          ));
+      }
+   });
+   
+}
+
+fn spawn_ui_wall_button(parent: &mut ChildBuilder) {
+   parent.spawn(NodeBundle {
+      style: Style {
+         // flex_direction: FlexDirection::Row,
+         margin: UiRect::all(Val::Px(10.)),
+         ..default()
+      },
+      background_color: Color::BLACK.into(),
+      ..default()
+   }).with_children(|parent| {
       parent.spawn((
          ButtonBundle {
-             style: Style {
-                border: UiRect::all(Val::Px(2.)),
-                margin: UiRect::horizontal(Val::Px(2.)),
+               style: Style {
+               width: Val::Px(20.),
+               height: Val::Px(20.),
+               border: UiRect::all(Val::Px(2.)),
+               margin: UiRect::all(Val::Px(2.)),
                ..default()
-             },
-             background_color: brick_color.into(),
-             ..default()
+               },
+               background_color: WALL_COLOR.into(),
+               ..default()
          },
-       ));
-   }
+         BrickButton::Wall(WALL_COLOR),
+         ));
+     
+   });
+   
 }
 
 fn my_cursor_system(
