@@ -1,9 +1,12 @@
-
+use std::arch::x86_64::_bittest;
 use bevy::app::Update;
 use bevy::diagnostic::{LogDiagnosticsPlugin};
+use bevy::input::keyboard::KeyboardInput;
+use bevy::input::mouse::MouseButtonInput;
 use bevy::math::Vec2;
 use bevy::prelude::{*};
 use bevy::ui::RelativeCursorPosition;
+use bevy::utils::HashMap;
 use bevy::window::PrimaryWindow;
 
 
@@ -12,6 +15,8 @@ const EDGE_COLOR: Color = Color::rgb(25.0/255.0, 25.0/255.0, 72.0/255.0);
 
 const BRICK_DEFAULT_COLOR: Color = Color::rgb(52.0/255.0, 216.0/255.0, 0.0/255.0);
 const BRICK_SIZE: Vec2 = Vec2::new(10., 10.);
+
+const GAP_BETWEEN_BRICK: Vec2 = Vec2::new(2.,2.);
 // const BRICK_COLOR: Color = Color::rgb(64.0/255.0, 230.0/255.0, 255.0/255.0);
 // const BRICK_COLOR: Color = Color::rgb(64.0/255.0, 230.0/255.0, 255.0/255.0);
 // const BRICK_COLOR: Color = Color::rgb(253.0/255.0, 240.0/255.0, 0.0/255.0);
@@ -55,37 +60,72 @@ enum BrickButton {
    Wall(Color),
 }
 
-#[derive(Component)]
+#[derive(Component, Copy, Clone, PartialEq)]
 enum Brick {
    Normal(Color),
    Wall(Color),
 }
 
+impl Brick {
+    fn color(&self) -> Color {
+        match self {
+            Brick::Normal(color) => {
+                *color
+            }
+            Brick::Wall(color) => {
+                *color
+            }
+        }
+    }
+}
+
+#[derive(Component)]
+struct PlacedBrick(Brick);
+
+#[derive(Resource)]
+struct PlacedBricks {
+    m: HashMap<i32, Entity>,
+}
+
+impl PlacedBricks {
+    fn new() -> Self {
+        Self {
+            m: HashMap::new(),
+        }
+    }
+}
+
 fn main() {
    App::new()
-      .add_plugins((
-         DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-               title: "breakout editor".into(),
-               resolution: SCREEN_SIZE.into(),
-               ..default()
-            }),
-            ..default()
-         }),
-         LogDiagnosticsPlugin::default(),
-         // FrameTimeDiagnosticsPlugin,
-      ))
-      .init_resource::<CursorWorldCoords>()
-      .init_resource::<SelectedButton>()
-      .insert_resource(ClearColor(BACKGROUND_COLOR))
-      .add_systems(Startup, (
-         setup,
-      ))
-      .add_systems(Update, (
-         my_cursor_system,
-         update_buttons,
-      ))
-      .run();
+        .add_plugins((
+             DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                   title: "breakout editor".into(),
+                   resolution: SCREEN_SIZE.into(),
+                   ..default()
+                }),
+                ..default()
+             }),
+             LogDiagnosticsPlugin::default(),
+             // FrameTimeDiagnosticsPlugin,
+        ))
+        .init_resource::<CursorWorldCoords>()
+        .init_resource::<SelectedButton>()
+        .insert_resource(PlacedBricks::new())
+        .insert_resource(ClearColor(BACKGROUND_COLOR))
+        .add_systems(Startup, (
+            setup,
+            setup_brick,
+            setup_gizmos,
+        ))
+        .add_systems(Update, (
+             my_cursor_system,
+             update_buttons,
+             move_brick_system,
+             check_relative_cursor_position,
+             place_brick_system,
+        ))
+        .run();
 }
 
 fn setup(
@@ -197,30 +237,39 @@ fn setup_brick(
    mut commands: Commands,
    selected_button_res: Res<SelectedButton>
 ) {
-   let brick_component;
-   let brick_color;
-   match selected_button_res.0 {
-      BrickButton::Brick(color) => {
+    let brick_component;
+    let brick_color;
+    match selected_button_res.0 {
+        BrickButton::Brick(color) => {
          brick_component = Brick::Normal(color);
          brick_color = color;
-      },
-      BrickButton::Wall(color) => {
+        },
+        BrickButton::Wall(color) => {
          brick_component = Brick::Wall(color);
          brick_color = color;
-      },
-   };
-   commands.spawn((
+        },
+    };
+    commands.spawn((
       SpriteBundle {
           sprite: Sprite {
               color: brick_color,
               ..default()
           },
           // global_transform: GlobalTransform::from(Transform::IDENTITY),
-          transform: Transform::from_translation(0.,0., 0.).with_scale(BRICK_SIZE),
+          transform: Transform::from_translation(Vec3::new(0.,0., 0.)).with_scale(BRICK_SIZE.extend(0.)),
           ..default()
       },
       brick_component,
-  ));
+    ));
+}
+
+fn setup_gizmos(
+    mut gizmos: Gizmos
+) {
+    for x in 0..=(EDGE_SIZE.0 as i32) / 2 {
+        gizmos.line_2d((x as f32, -EDGE_SIZE.1 / 2.0).into(), (x as f32, EDGE_SIZE.1 / 2.0).into(), Color::WHITE);
+        gizmos.line_2d((-x as f32, -EDGE_SIZE.1 / 2.0).into(), (-x as f32, EDGE_SIZE.1 / 2.0).into(), Color::WHITE);
+    }
 }
 
 fn spawn_ui_brick_button(parent: &mut ChildBuilder) {
@@ -282,21 +331,39 @@ fn spawn_ui_wall_button(parent: &mut ChildBuilder) {
 }
 
 fn update_buttons(
-   button_query: Query<
+    mut commands: Commands,
+    button_query: Query<
       (&Interaction, &BrickButton),
       Changed<Interaction>
-   >,
-   mut selected_button_res: ResMut<SelectedButton>
+    >,
+    mut selected_button_res: ResMut<SelectedButton>,
+    brick_query: Query<(Entity, &Brick)>,
 ){
-   for (&interaction, &brick_buttion) in &button_query {
-      match interaction {
-         Interaction::Pressed => {
-            selected_button_res.0 = brick_buttion;
+    let (brick_entity, brick) = brick_query.single();
+
+    for (&interaction, &brick_button) in &button_query {
+        match interaction {
+        Interaction::Pressed => {
+            selected_button_res.0 = brick_button;
             info!("selected_button_res:{:?}", selected_button_res.0);
-         },
-         _ => {}
-      }
-   }
+
+            let pressed_brick_component;
+            match selected_button_res.0 {
+                 BrickButton::Brick(color) => {
+                     pressed_brick_component = Brick::Normal(color);
+                 },
+                 BrickButton::Wall(color) => {
+                     pressed_brick_component = Brick::Wall(color);
+                 },
+            };
+            if pressed_brick_component.eq(brick) {
+                return;
+            }
+            commands.entity(brick_entity).insert(pressed_brick_component);
+        },
+        _ => {}
+        }
+    }
 }
 
 fn my_cursor_system(
@@ -321,4 +388,106 @@ fn my_cursor_system(
    // window.cursor.visible = true;
    
    // info!("cursor:{:?}, point:{:?}", cursor_position, point)
+}
+
+fn move_brick_system(
+    cursor_world_coords: Res<CursorWorldCoords>,
+    mut brick_query: Query<&mut Transform, With<Brick>>
+) {
+    for mut transform in &mut brick_query {
+        let mut x = cursor_world_coords.x.clamp(-EDGE_SIZE.0/2. + BRICK_SIZE.x / 2., EDGE_SIZE.0/2. - BRICK_SIZE.x / 2.);
+        let mut y = cursor_world_coords.y.clamp(-EDGE_SIZE.1/2. + BRICK_SIZE.y / 2., EDGE_SIZE.1/2. - BRICK_SIZE.y / 2.);
+
+        x = (x / (BRICK_SIZE.x + GAP_BETWEEN_BRICK.x)).floor() * (BRICK_SIZE.x + GAP_BETWEEN_BRICK.x)
+            + (BRICK_SIZE.x + GAP_BETWEEN_BRICK.x) / 2.0;
+
+        y = (y / (BRICK_SIZE.x + GAP_BETWEEN_BRICK.x)).floor() * (BRICK_SIZE.y + GAP_BETWEEN_BRICK.y)
+            + (BRICK_SIZE.y + GAP_BETWEEN_BRICK.y) / 2.0 ;
+
+        transform.translation = Vec2::new(x,y).extend(1.0);
+
+        // info!("pos:{}", transform.translation);
+    }
+}
+
+fn check_relative_cursor_position(
+    relative_cursor_position_query: Query<&RelativeCursorPosition>,
+    mut q_window: Query<&mut Window, With<PrimaryWindow>>,
+) {
+    let relative_cursor_position = relative_cursor_position_query.single();
+    let mut window = q_window.single_mut();
+
+    // if relative_cursor_position.mouse_over() {
+    //    window.cursor.visible = true;
+    // } else {
+    //     window.cursor.visible = false;
+    // }
+}
+
+fn place_brick_system(
+    mut commands: Commands,
+    brick_query: Query<(&Transform, &Brick), With<Brick>>,
+    mut placed_bricks_res: ResMut<PlacedBricks>,
+    placed_brick_query: Query<&PlacedBrick>,
+    mouse: Res<Input<MouseButton>>,
+    relative_cursor_position_query: Query<&RelativeCursorPosition>,
+
+) {
+    let relative_cursor_position = relative_cursor_position_query.single();
+
+    if relative_cursor_position.mouse_over() {
+        return;
+    }
+
+    let (&brick_transform, brick) = brick_query.single();
+
+    let zone;
+
+
+    if brick_transform.translation.x > 0.0 {
+        if brick_transform.translation.y > 0.0 {
+            zone = 1;
+        } else {
+            zone = 4;
+        }
+    } else {
+        if brick_transform.translation.y > 0.0 {
+            zone = 2;
+        } else {
+            zone = 3;
+        }
+    }
+
+    let key = zone * 10_000_000 + brick_transform.translation.x.abs() as i32 * 1_000_000
+        + brick_transform.translation.y.abs() as i32 * 1000;
+
+    if mouse.pressed(MouseButton::Left) || mouse.pressed(MouseButton::Right) {
+        if let Some(&old) = placed_bricks_res.m.get(&key) {
+            let old_placed_brick = placed_brick_query.get(old).unwrap();
+            if  mouse.pressed(MouseButton::Left) && old_placed_brick.0.eq(brick) {
+                info!("same place, jump out!");
+                return;
+            }
+            commands.entity(old).despawn();
+            placed_bricks_res.m.remove(&key);
+            info!("move old");
+        }
+    }
+
+    if mouse.pressed(MouseButton::Left) {
+        let id = commands.spawn((
+            SpriteBundle {
+                sprite: Sprite {
+                    color: brick.color(),
+                    ..default()
+                },
+                // global_transform: GlobalTransform::from(Transform::IDENTITY),
+                transform: Transform::from_translation(brick_transform.translation).with_scale(BRICK_SIZE.extend(0.)),
+                ..default()
+            },
+            PlacedBrick(*brick),
+        )).id();
+
+        placed_bricks_res.m.insert(key, id);
+    }
 }
