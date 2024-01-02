@@ -539,6 +539,14 @@ fn export_placed_bricks(
         bricks.push(data);
     }
 
-    let j = serde_json::to_string_pretty(&bricks);
+    let export_data = ExportData {
+        bricks: bricks,
+    };
+
+    let j = serde_json::to_string_pretty(&export_data);
     println!("{:?}", j);
+    if let Ok(json_str) = j {
+        let _ = std::fs::write("./output.json", json_str);
+    };
+   
 }
