@@ -1,14 +1,14 @@
-use std::arch::x86_64::_bittest;
 use bevy::app::Update;
-use bevy::diagnostic::{LogDiagnosticsPlugin};
-use bevy::input::keyboard::KeyboardInput;
-use bevy::input::mouse::MouseButtonInput;
+use bevy::diagnostic::LogDiagnosticsPlugin;
+
 use bevy::math::Vec2;
 use bevy::prelude::{*};
+
 use bevy::ui::RelativeCursorPosition;
 use bevy::utils::HashMap;
 use bevy::window::PrimaryWindow;
 
+use serde::{Serialize, Deserialize};
 
 const BACKGROUND_COLOR: Color = Color::rgb(35.0/255.0, 35.0/255.0, 105.0/255.0);
 const EDGE_COLOR: Color = Color::rgb(25.0/255.0, 25.0/255.0, 72.0/255.0);
@@ -25,7 +25,6 @@ const GAP_BETWEEN_BRICK: Vec2 = Vec2::new(2.,2.);
 
 const BRICK_COLORS: &[Color]= &[
    Color::rgb(52.0/255.0, 216.0/255.0, 0.0/255.0),
-   Color::rgb(64.0/255.0, 230.0/255.0, 255.0/255.0),
    Color::rgb(64.0/255.0, 230.0/255.0, 255.0/255.0),
    Color::rgb(253.0/255.0, 240.0/255.0, 0.0/255.0),
    Color::rgb(250.0/255.0, 163.0/255.0, 1.0/255.0),
@@ -119,11 +118,12 @@ fn main() {
             setup_gizmos,
         ))
         .add_systems(Update, (
-             my_cursor_system,
-             update_buttons,
-             move_brick_system,
-             check_relative_cursor_position,
-             place_brick_system,
+            my_cursor_system,
+            update_buttons,
+            move_brick_system,
+            check_relative_cursor_position,
+            place_brick_system,
+            export_placed_bricks,
         ))
         .run();
 }
@@ -337,7 +337,7 @@ fn update_buttons(
       Changed<Interaction>
     >,
     mut selected_button_res: ResMut<SelectedButton>,
-    brick_query: Query<(Entity, &Brick)>,
+    brick_query: Query<(Entity,  &Brick)>,
 ){
     let (brick_entity, brick) = brick_query.single();
 
@@ -359,7 +359,14 @@ fn update_buttons(
             if pressed_brick_component.eq(brick) {
                 return;
             }
-            commands.entity(brick_entity).insert(pressed_brick_component);
+
+            commands.entity(brick_entity).insert((
+               pressed_brick_component,
+               Sprite {
+                  color: pressed_brick_component.color(),
+                  ..default()
+              },
+            ));
         },
         _ => {}
         }
@@ -490,4 +497,48 @@ fn place_brick_system(
 
         placed_bricks_res.m.insert(key, id);
     }
+}
+#[derive(Default, Serialize, Deserialize)]
+struct BrickData {
+   brick_type: u8,
+   color: Color,
+   pos: Vec2,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct ExportData {
+   bricks: Vec<BrickData>,
+}
+
+fn export_placed_bricks(
+   placed_brick_query: Query<(&Transform, &PlacedBrick)>,
+   mouse: Res<Input<MouseButton>>,
+) {
+    if !mouse.just_pressed(MouseButton::Middle) {
+        return;
+    }
+    let mut bricks = Vec::new();
+    for (transform, placed_brick) in &placed_brick_query {
+        let brick_type;
+        let color;
+        match placed_brick.0 {
+            Brick::Normal(c) =>  {
+            brick_type = 0;
+            color = c;
+            },
+            Brick::Wall(c) => {
+            brick_type = 1;
+            color = c;
+            },
+        }
+        let data = BrickData {
+            brick_type,
+            color,
+            pos: transform.translation.truncate(),
+        };
+        bricks.push(data);
+    }
+
+    let j = serde_json::to_string_pretty(&bricks);
+    println!("{:?}", j);
 }
