@@ -33,8 +33,8 @@ const BRICK_COLORS: &[Color]= &[
 
 const WALL_COLOR: Color = Color::rgb(117.0/255.0, 117.0/255.0, 119.0/255.0);
 
-const SCREEN_SIZE:(f32, f32) = (900.0, 860.0);
-const EDGE_SIZE:(f32, f32) = (840.0, 840.0);
+const SCREEN_SIZE:(f32, f32) = (720.0, 960.0);
+const EDGE_SIZE:(f32, f32) = (680.0, 900.0);
 
 const UI_NODE_SIZE: Vec2 = Vec2::new(300.0, 150.0);
 
